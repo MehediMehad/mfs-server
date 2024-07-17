@@ -45,7 +45,7 @@ async function run() {
         phone,
         email,
         role,
-        status: "pending",
+        status: false,
         balance: 0,
       };
       try {
@@ -61,29 +61,51 @@ async function run() {
       }
     });
     // 
-    app.post("/login", async (req, res) => {
-      const { identifier, pin } = req.body;
-      const user = await usersCollection.findOne({
-        $or: [{ email: identifier }, { phone: identifier }],
-      });
+    // app.post("/login", async (req, res) => {
+    //   const { identifier, pin } = req.body;
+    //   const user = await usersCollection.findOne({
+    //     $or: [{ email: identifier }, { phone: identifier }],
+    //   });
 
-      if (!user) {
-        return res.status(404).send({ error: "User not found" });
+    //   if (!user) {
+    //     return res.status(404).send({ error: "User not found" });
+    //   }
+
+    //   const isMatch = await bcrypt.compare(pin, user.pin);
+
+    //   if (!isMatch) {
+    //     return res.status(401).send({ error: "Invalid credentials" });
+    //   }
+
+    //   const token = jwt.sign(
+    //     { userId: user._id, role: user.role },
+    //     process.env.ACCESS_TOKEN_SECRET,
+    //     { expiresIn: "1h" }
+    //   );
+    //   res.status(200).send({ token });
+    // });
+    app.post('/login', async (req, res) => {
+      const { mobile, email, pin } = req.body;
+      try {
+          const user = await usersCollection.findOne({ $or: [{ mobile }, { email }] });
+          if (!user || !(await bcrypt.compare(pin, user.pin))) {
+              return res.status(400).json({ error: 'Invalid credentials' });
+          }
+          const token = jwt.sign({ userId: user._id }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+          res.json({ token });
+      } catch (error) {
+          res.status(500).json({ error: 'Login failed' });
       }
-
-      const isMatch = await bcrypt.compare(pin, user.pin);
-
-      if (!isMatch) {
-        return res.status(401).send({ error: "Invalid credentials" });
-      }
-
-      const token = jwt.sign(
-        { userId: user._id, role: user.role },
-        process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: "1h" }
-      );
-      res.status(200).send({ token });
-    });
+  });
+  // get all user
+  app.get("/users", async (req, res) => {
+    try {
+      const users = await usersCollection.find({ status: true }).toArray();
+      res.status(200).json(users);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
