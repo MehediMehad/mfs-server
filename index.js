@@ -3,7 +3,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 require("dotenv").config();
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 const app = express();
 const bcrypt = require("bcryptjs");
 const port = process.env.PORT || 5000;
@@ -50,17 +50,15 @@ async function run() {
       };
       try {
         const result = await usersCollection.insertOne(newUser);
-        res
-          .status(201)
-          .send({
-            message: "User registered successfully",
-            userId: result.insertedId,
-          });
+        res.status(201).send({
+          message: "User registered successfully",
+          userId: result.insertedId,
+        });
       } catch (error) {
         res.status(500).send({ error: "Failed to register user" });
       }
     });
-    // 
+    //
     // app.post("/login", async (req, res) => {
     //   const { identifier, pin } = req.body;
     //   const user = await usersCollection.findOne({
@@ -84,28 +82,65 @@ async function run() {
     //   );
     //   res.status(200).send({ token });
     // });
-    app.post('/login', async (req, res) => {
+
+    // User approval by admin
+    app.post("/admin/approve", async (req, res) => {
+      const { userId } = req.body;
+      const user = await usersCollection.findOne({ _id: new ObjectID(userId) });
+
+      if (!user) {
+        return res.status(404).send({ error: "User not found" });
+      }
+
+      const bonus = user.role === "agent" ? 10000 : 40;
+
+      try {
+        await usersCollection.updateOne(
+          { _id: new ObjectID(userId) },
+          { $set: { status: "active", balance: bonus } }
+        );
+        res.status(200).send({ message: "User approved successfully" });
+      } catch (error) {
+        res.status(500).send({ error: "Failed to approve user" });
+      }
+    });
+
+    // login
+    app.post("/login", async (req, res) => {
       const { mobile, email, pin } = req.body;
       try {
-          const user = await usersCollection.findOne({ $or: [{ mobile }, { email }] });
-          if (!user || !(await bcrypt.compare(pin, user.pin))) {
-              return res.status(400).json({ error: 'Invalid credentials' });
-          }
-          const token = jwt.sign({ userId: user._id }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
-          res.json({ token });
+        const user = await usersCollection.findOne({
+          $or: [{ mobile }, { email }],
+        });
+        if (!user || !(await bcrypt.compare(pin, user.pin))) {
+          return res.status(400).json({ error: "Invalid credentials" });
+        }
+        const token = jwt.sign(
+          { userId: user._id },
+          process.env.ACCESS_TOKEN_SECRET,
+          { expiresIn: "1h" }
+        );
+        res.json({ token });
       } catch (error) {
-          res.status(500).json({ error: 'Login failed' });
+        res.status(500).json({ error: "Login failed" });
       }
-  });
-  // get all user
-  app.get("/users", async (req, res) => {
-    try {
-      const users = await usersCollection.find({ status: true }).toArray();
-      res.status(200).json(users);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch users" });
-    }
-  });
+    });
+
+    // get all users data from db
+    app.get("/users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    // get verified all user
+    app.get("/verified/users", async (req, res) => {
+      try {
+        const users = await usersCollection.find({ status: true }).toArray();
+        res.status(200).json(users);
+      } catch (error) {
+        res.status(500).json({ error: "Failed to fetch users" });
+      }
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
